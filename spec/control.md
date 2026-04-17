@@ -1,76 +1,142 @@
 # AriaCast Control Messages
 
-**Version:** v0.1 (Draft)
+**Version:** 1.0
 
-Control messages use WebSocket text frames with JSON payload.
+Control messages are exchanged over the `/control` WebSocket endpoint and via the `POST /api/command` HTTP endpoint. See [`transport.md`](transport.md) for connection details.
 
-## Envelope
+---
+
+## Receiver → Sender: `action`-keyed commands
+
+When a command is triggered (by an external controller, the web UI, or `POST /api/command`), the Receiver sends the following JSON text frame to **all** connected `/control` WebSocket clients, including the Sender:
 
 ```json
-{
-  "type": "control",
-  "session_id": "6e322c67-33b4-4fdb-bf7f-3c3083e31df7",
-  "command": "play",
-  "timestamp_us": 0,
-  "params": {}
-}
+{"action": "play"}
 ```
 
-## Commands
+### Command reference
 
-| Command | Direction | `params` |
+| `action` value | Description | Extra fields |
 |---|---|---|
-| `play` | Sender/Controller -> Receiver | `{}` |
-| `pause` | Sender/Controller -> Receiver | `{}` |
-| `stop` | Sender/Controller -> Receiver | `{}` |
-| `latency_update` | Either direction | `{ "latency_target_us": <u32> }` |
-| `metadata` | Sender -> Receiver | `{ "title": "...", "artist": "..." }` |
+| `play` | Resume or start playback | — |
+| `pause` | Pause playback | — |
+| `next` | Skip to next track | — |
+| `previous` | Go to previous track | — |
+| `stop` | Stop playback | — |
+| `toggle` | Toggle play/pause state | — |
+| `seek` | Seek to a position | `"position_ms": <integer>` |
 
-## Examples
-
-### Pause
-
-```json
-{
-  "type": "control",
-  "session_id": "6e322c67-33b4-4fdb-bf7f-3c3083e31df7",
-  "command": "pause",
-  "timestamp_us": 2540000,
-  "params": {}
-}
-```
-
-### Latency update
+### Seek example
 
 ```json
-{
-  "type": "control",
-  "session_id": "6e322c67-33b4-4fdb-bf7f-3c3083e31df7",
-  "command": "latency_update",
-  "timestamp_us": 2600000,
-  "params": {
-    "latency_target_us": 150000
-  }
-}
+{"action": "seek", "position_ms": 45000}
 ```
 
-### Metadata update
+### Android handling
+
+The Android Sender reads the `"action"` field and maps it case-insensitively to a `MediaCommand` enum:
+
+```
+PLAY, PAUSE, TOGGLE, NEXT, PREVIOUS, STOP
+```
+
+Unknown `action` values are silently ignored. `seek` triggers `transportControls.seekTo(position_ms)` on the active `MediaController`.
+
+---
+
+## Sender → Receiver: `command`-keyed messages (Python server)
+
+The Python server accepts playback commands using either a `command` key or an `action` key. The Go server does **not** process incoming WebSocket text frames on `/control`; it only sends to clients.
+
+### Playback commands
 
 ```json
-{
-  "type": "control",
-  "session_id": "6e322c67-33b4-4fdb-bf7f-3c3083e31df7",
-  "command": "metadata",
-  "timestamp_us": 3000000,
-  "params": {
-    "title": "Night Drive",
-    "artist": "Aria Ensemble"
-  }
-}
+{"command": "play"}
+{"command": "pause"}
+{"command": "next"}
+{"command": "previous"}
+{"command": "stop"}
+{"command": "play_pause"}
+{"command": "seek", "position_ms": 45000}
+{"command": "seek", "value": 45000}
 ```
+
+`play_pause` toggles the current playback state based on the stored `is_playing` flag. `seek` accepts the position in `position_ms` or `value` (both are integers in milliseconds).
+
+**Response (Python server):**
+
+```json
+{"command": "play", "success": true}
+{"command": "seek", "position_ms": 45000, "success": true}
+```
+
+### Volume commands (Python server only)
+
+Volume commands are only sent by the Android Sender when the target server platform is **not** identified as "Music" (e.g. Music Assistant).
+
+#### Step up/down
+
+```json
+{"command": "volume", "direction": "up"}
+{"command": "volume", "direction": "down"}
+```
+
+#### Query current volume
+
+```json
+{"command": "volume", "direction": "get"}
+```
+
+#### Set absolute volume (two formats — both accepted)
+
+```json
+{"command": "volume", "value": 80}
+{"command": "volume_set", "level": 80}
+```
+
+Volume is an integer in the range `0`–`100`.
+
+**Response:**
+
+```json
+{"command": "volume", "level": 75, "success": true}
+```
+
+`"level"` is the resulting volume after the operation (0–100), or `-1` if volume control is unavailable.
+
+---
+
+## HTTP POST /api/command
+
+An HTTP alternative that does not require a persistent WebSocket connection. Used by the web dashboard and external integrations (e.g. Music Assistant).
+
+### Request body
+
+```json
+{"action": "play"}
+{"action": "pause"}
+{"action": "next"}
+{"action": "previous"}
+```
+
+### Behaviour
+
+1. The Receiver validates that `action` is present.
+2. It forwards `{"action": "<value>"}` to any connected `/control` WebSocket client.
+3. For `play` and `pause`, the Go server additionally updates the internal `is_playing` state and broadcasts a metadata update to all `/metadata` subscribers.
+
+### Responses
+
+| Status | Condition |
+|---|---|
+| `200 OK` | Command forwarded successfully |
+| `400 Bad Request` | Missing `action` field or invalid JSON |
+| `503 Service Unavailable` | No `/control` WebSocket client is connected (Go server) |
+
+---
 
 ## Extensibility
 
-- New commands MUST use new `command` values.
-- Receivers MUST ignore unknown fields in `params`.
-- Unknown `command` MUST return `error` with `UNKNOWN_COMMAND`.
+- Receivers MUST ignore unknown fields in any control message.
+- Unknown `action` or `command` values MUST NOT crash the receiver; they SHOULD be logged.
+- New commands MUST use new `action` / `command` string values.

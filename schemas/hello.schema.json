@@ -1,38 +1,3 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ariacast.org/schemas/hello.schema.json",
-  "title": "AriaCast Hello",
-  "type": "object",
-  "required": ["type", "version", "role", "device", "audio", "capabilities"],
-  "properties": {
-    "type": { "const": "hello" },
-    "version": { "const": "0.1" },
-    "role": { "enum": ["sender", "controller"] },
-    "device": {
-      "type": "object",
-      "required": ["id", "name"],
-      "properties": {
-        "id": { "type": "string", "minLength": 1 },
-        "name": { "type": "string", "minLength": 1 }
-      },
-      "additionalProperties": true
-    },
-    "audio": {
-      "type": "object",
-      "required": ["codec", "sample_rate", "channels", "frame_duration_us"],
-      "properties": {
-        "codec": { "const": "pcm_s16le" },
-        "sample_rate": { "type": "integer", "minimum": 1 },
-        "channels": { "enum": [1, 2] },
-        "frame_duration_us": { "type": "integer", "minimum": 1000 }
-      },
-      "additionalProperties": true
-    },
-    "capabilities": {
-      "type": "array",
-      "items": { "type": "string", "minLength": 1 },
-      "uniqueItems": true
-    }
-  },
-  "additionalProperties": true
+  "$comment": "DEPRECATED: This schema described the 'hello' message which does not exist in the actual implementations. The Sender does not send any message at connection time. See handshake_ready.schema.json for the actual /audio handshake message sent by the Receiver."
 }

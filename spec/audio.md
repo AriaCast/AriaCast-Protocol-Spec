@@ -1,64 +1,68 @@
 # AriaCast Audio Frames
 
-**Version:** v0.1 (Draft)
+**Version:** 1.0
 
-## Supported formats (v0.1)
+## Format
 
-| Field | Value |
+| Parameter | Value |
 |---|---|
-| Codec | `pcm_s16le` |
-| Sample rate | `48000` Hz default |
-| Channels | `1` (mono) or `2` (stereo) |
-| Frame duration | `20000` us recommended |
+| Codec | PCM signed 16-bit little-endian (`pcm_s16le`) |
+| Sample rate | 48000 Hz |
+| Channels | 2 (stereo) |
+| Frame duration | 20 ms |
+| Frame size | **3840 bytes** |
 
-## Binary frame envelope
+## Frame structure
 
-Each WebSocket binary message contains exactly one AriaCast frame.
-
-### Header layout (16 bytes, little-endian)
-
-```text
-Offset  Size  Type    Field
-0       8     u64     timestamp_us
-8       4     u32     frame_id
-12      4     u32     payload_length
-16      N     bytes   payload
-```
-
-### Field definitions
-
-| Field | Description |
-|---|---|
-| `timestamp_us` | Stream timestamp in microseconds (see `timing.md`) |
-| `frame_id` | Monotonic per-session frame counter starting at 0 |
-| `payload_length` | Number of payload bytes following the header |
-| `payload` | Raw PCM data for this frame |
-
-## PCM payload layout
-
-For stereo (`channels=2`), samples are interleaved:
+Each WebSocket binary message contains **one frame** of exactly **3840 bytes** of raw PCM data. There is **no frame header** of any kind. The entire binary message payload is audio samples.
 
 ```text
-L0, R0, L1, R1, L2, R2, ...
+[raw PCM bytes — exactly 3840 bytes]
 ```
 
-Each sample is signed 16-bit little-endian.
+## PCM sample layout
 
-For mono (`channels=1`), payload is:
+Stereo interleaved, little-endian signed 16-bit integers:
 
 ```text
-M0, M1, M2, ...
+L0, R0, L1, R1, L2, R2, ... L959, R959
 ```
 
-## Validation requirements
+- Each sample is a signed 16-bit integer (2 bytes, little-endian)
+- One frame contains **960 sample pairs** per channel
+- Total: 960 × 2 channels × 2 bytes = **3840 bytes**
 
-- `payload_length` MUST equal remaining bytes in binary frame.
-- `frame_id` SHOULD increment by 1 per frame.
-- Receiver SHOULD drop malformed frames and emit `error`.
+## Frame size derivation
 
-## Future codec extensibility
+```
+frame_size = sample_rate × channels × sample_width_bytes × frame_duration_ms / 1000
+           = 48000 × 2 × 2 × 20 / 1000
+           = 3840 bytes
+```
 
-Future versions may add codecs (e.g., Opus, AAC) via handshake negotiation:
-- sender advertises preferred codec in `hello.audio.codec`
-- receiver confirms selected codec in `welcome.accepted_audio.codec`
-- unknown codecs MUST be rejected with `UNSUPPORTED_FORMAT`
+## Sender behaviour (Android)
+
+- The Android app allocates a `ByteBuffer` of exactly `FRAME_SIZE = 3840` bytes.
+- `AudioRecord.read()` is called for exactly `3840` bytes per iteration.
+- A **partial read** (fewer than 3840 bytes returned) is discarded; the frame is not sent.
+- An **`AudioRecord` error** (negative return value) causes the audio session to terminate.
+- Each successful read is sent as a WebSocket binary frame using `Frame.Binary(true, data)`.
+
+## Receiver behaviour
+
+### Python server
+- Rejects frames where `len(data) != 3840` (logs a warning and discards).
+- Converts bytes to a NumPy `int16` array (little-endian: `dtype='<i2'`).
+- Queues the decoded samples for audio playback callback.
+
+### Go server
+- Passes the raw bytes to the pipe bridge channel and the web broadcast pool without length validation.
+- Writes silence (zero bytes of the same length) to the output pipe when the stream is paused.
+
+## Prebuffering
+
+The Python server waits for **25 frames (500 ms)** to accumulate before starting local audio playback. This smooths over initial network jitter. After that point the server plays audio in real-time as frames arrive.
+
+## Streaming WAV output
+
+Both servers expose a `GET /stream.wav` HTTP endpoint that prefixes a standard 44-byte WAV header (RIFF/PCM) with `0xFFFFFFFF` as the file and data chunk sizes (indicating an open-ended stream), then streams raw PCM frames from the audio source in real-time. This allows standard media players (VLC, browsers) to connect and play the audio.

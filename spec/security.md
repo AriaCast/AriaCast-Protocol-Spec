@@ -1,44 +1,32 @@
 # AriaCast Security
 
-**Version:** v0.1 (Draft)
+**Version:** 1.0
 
-## Current model (v0.1)
+## Current model
 
-AriaCast v0.1 assumes a trusted local network.
+AriaCast assumes a **trusted local network**.
 
-- Transport defaults to unencrypted `ws://`
-- No mandatory authentication in v0.1
-- Implementations SHOULD bind only on LAN interfaces
-- Implementations SHOULD allow user opt-in allowlists
+- Transport uses unencrypted `ws://` and `http://`
+- No authentication or authorisation in any implementation
+- No pairing or identity verification
+- All implementations bind to `0.0.0.0` (all interfaces)
 
 ## Threat considerations
 
 On untrusted LANs, attackers may:
-- inject control commands
-- observe metadata
-- disrupt playback
+- Inject audio frames into an open `/audio` endpoint
+- Send arbitrary control commands to `/api/command` or `/control`
+- Read metadata from `/metadata` WebSocket subscribers
+- Retrieve audio via `/stream.wav` or `/artwork`
+- Disrupt playback by connecting as the single-slot audio client
 
-Use only on trusted networks until stronger security is enabled.
+**AriaCast MUST only be used on trusted, private LAN networks.**
 
 ## Future security extensions
 
-### Pairing
+These are not implemented in any current version:
 
-Planned pairing flow:
-- receiver enters pairing mode
-- sender proves possession of short code/token
-- receiver stores sender identity key
-
-### Authentication
-
-Planned authenticated sessions:
-- `hello` includes signed nonce/token
-- receiver validates sender identity
-- unauthorized sessions rejected with `UNAUTHORIZED`
-
-### TLS support
-
-Planned secure transport:
-- `wss://` endpoint advertisement
-- certificate pinning or trust-on-first-use options
-- capability flag for mandatory secure transport
+- **Pairing:** receiver enters pairing mode; sender proves possession of a shared code
+- **Authentication:** `Authorization` header or token on WebSocket upgrade request
+- **TLS:** `wss://` and `https://` endpoint variants
+- **Allowlists:** per-IP or per-identity sender allowlists
