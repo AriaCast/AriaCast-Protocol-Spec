@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ariacast.org/schemas/welcome.schema.json",
+  "title": "AriaCast Welcome",
+  "type": "object",
+  "required": ["type", "version", "session_id", "server", "accepted_audio", "latency_target_us", "capabilities"],
+  "properties": {
+    "type": { "const": "welcome" },
+    "version": { "const": "0.1" },
+    "session_id": { "type": "string", "minLength": 1 },
+    "server": {
+      "type": "object",
+      "required": ["id", "name"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": true
+    },
+    "accepted_audio": {
+      "type": "object",
+      "required": ["codec", "sample_rate", "channels", "frame_duration_us"],
+      "properties": {
+        "codec": { "const": "pcm_s16le" },
+        "sample_rate": { "type": "integer", "minimum": 1 },
+        "channels": { "enum": [1, 2] },
+        "frame_duration_us": { "type": "integer", "minimum": 1000 }
+      },
+      "additionalProperties": true
+    },
+    "latency_target_us": { "type": "integer", "minimum": 0 },
+    "capabilities": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    }
+  },
+  "additionalProperties": true
+}

@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ariacast.org/schemas/control.schema.json",
+  "title": "AriaCast Control",
+  "type": "object",
+  "required": ["type", "session_id", "command", "timestamp_us", "params"],
+  "properties": {
+    "type": { "const": "control" },
+    "session_id": { "type": "string", "minLength": 1 },
+    "command": {
+      "enum": ["play", "pause", "stop", "latency_update", "metadata"]
+    },
+    "timestamp_us": { "type": "integer", "minimum": 0 },
+    "params": { "type": "object" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "command": { "const": "latency_update" } },
+        "required": ["command"]
+      },
+      "then": {
+        "properties": {
+          "params": {
+            "type": "object",
+            "required": ["latency_target_us"],
+            "properties": {
+              "latency_target_us": { "type": "integer", "minimum": 0 }
+            },
+            "additionalProperties": true
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "command": { "const": "metadata" } },
+        "required": ["command"]
+      },
+      "then": {
+        "properties": {
+          "params": {
+            "type": "object",
+            "properties": {
+              "title": { "type": "string" },
+              "artist": { "type": "string" }
+            },
+            "additionalProperties": true
+          }
+        }
+      }
+    }
+  ],
+  "additionalProperties": true
+}
