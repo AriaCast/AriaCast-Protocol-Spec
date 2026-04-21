@@ -1,4 +1,4 @@
-# AriaCast Protocol Specification
+8# AriaCast Protocol Specification
 
 AriaCast is an open, local-first protocol for real-time audio streaming over LAN networks.
 
@@ -36,4 +36,4 @@ This repository is the **normative reference** for the AriaCast wire protocol. I
 
 ## Versioning
 
-This specification targets **AriaCast v1.0** (current stable implementations).
+This specification targets **AriaCast v1.1** (current stable implementations).
